@@ -1,72 +1,106 @@
-const express = require('express')
-const app = express()
-const db = require('cyclic-dynamodb')
+const express = require('express');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
+const cors = require('cors');
+require('dotenv').config()
 
-app.use(express.json())
-app.use(express.urlencoded({ extended: true }))
+const {connection} = require("./config/db")
+const {UzerModel} = require("./models/uzer.model")
+const { authenticate } = require('./middelwares/authonticate');
 
-// #############################################################################
-// This configures static hosting for files in /public that have the extensions
-// listed in the array.
-// var options = {
-//   dotfiles: 'ignore',
-//   etag: false,
-//   extensions: ['htm', 'html','css','js','ico','jpg','jpeg','png','svg'],
-//   index: ['index.html'],
-//   maxAge: '1m',
-//   redirect: false
-// }
-// app.use(express.static('public', options))
-// #############################################################################
+const {todoRouter} = require("./Routs/todo.routs");
 
-// Create or Update an item
-app.post('/:col/:key', async (req, res) => {
-  console.log(req.body)
 
-  const col = req.params.col
-  const key = req.params.key
-  console.log(`from collection: ${col} delete key: ${key} with params ${JSON.stringify(req.params)}`)
-  const item = await db.collection(col).set(key, req.body)
-  console.log(JSON.stringify(item, null, 2))
-  res.json(item).end()
+
+
+app = express()
+app.use(cors())
+app.use(express.json());
+app.get("/",(req,res)=>{
+    res.send("Welcome")
+})
+app.post("/signup",async(req,res)=>{
+
+    const {email,password,name}  =  req.body;
+    const userpresent = await UzerModel.findOne({email:email});
+    console.log(userpresent);
+    if(userpresent){
+        res.send({"msg":"try login user already there"})
+    }
+    else{
+try{
+    bcrypt.hash(password,5, async function(err,hash){
+        
+        const user   = new UzerModel({email,password:hash,name});
+        await user.save()
+        res.send({"msg":"signup succesfully"});
+
+    });
+}catch(err){
+    res.send({"msg":"please try again later"})
+    console.log(err);
+}
+    }
+});
+
+app.get("/uzers",async(req,res)=>{
+
+        const uzer = await UzerModel.find()
+
+        res.send(uzer)
 })
 
-// Delete an item
-app.delete('/:col/:key', async (req, res) => {
-  const col = req.params.col
-  const key = req.params.key
-  console.log(`from collection: ${col} delete key: ${key} with params ${JSON.stringify(req.params)}`)
-  const item = await db.collection(col).delete(key)
-  console.log(JSON.stringify(item, null, 2))
-  res.json(item).end()
-})
+app.post("/login",async(req,res)=>{
+    const {email,password} = req.body;
+    
+    
+    try{
+        
+        const user =await UzerModel.find({email});
+        
+        if(user.length>0){
+            const hashed_pass = user[0].password;
+        bcrypt.compare(password,hashed_pass,function(err,result){
+                if(result){
+                    const token = jwt.sign({"userID":user[0]._id},process.env.secret_key);
+                    res.send({"msg":"login done","token":token})
+                }else{
+                    res.send({"msg":"login failed"})
+                }
 
-// Get a single item
-app.get('/:col/:key', async (req, res) => {
-  const col = req.params.col
-  const key = req.params.key
-  console.log(`from collection: ${col} get key: ${key} with params ${JSON.stringify(req.params)}`)
-  const item = await db.collection(col).get(key)
-  console.log(JSON.stringify(item, null, 2))
-  res.json(item).end()
-})
+        });
+        }else{
+            res.send({"msg":"login failed"})
+        } 
+    }catch(err){
+        console.log(err);
+        res.send({"msg":"login something went wrong"})
+    }
+});
 
-// Get a full listing
-app.get('/:col', async (req, res) => {
-  const col = req.params.col
-  console.log(`list collection: ${col} with params: ${JSON.stringify(req.params)}`)
-  const items = await db.collection(col).list()
-  console.log(JSON.stringify(items, null, 2))
-  res.json(items).end()
-})
+app.use(authenticate)
+app.use("/todo",todoRouter)
 
-// Catch all handler for all other request.
-app.use('*', (req, res) => {
-  res.json({ msg: 'no route handler found' }).end()
-})
 
-// Start the server
-const port = process.env.PORT || 3000
-app.listen(port, () => {
-  console.log(`index.js listening on ${port}`)
-})
+
+
+
+
+
+
+
+
+
+
+
+
+app.listen(process.env.port,async()=>{
+    try{
+        await connection;
+        console.log("connected to DB sucessfuly");
+    }catch(err){
+        console.log("Error in listening");
+        console.log(err);
+    }
+    console.log(`listening on port ${process.env.port}`);
+});
