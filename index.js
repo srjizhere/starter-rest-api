@@ -1,4 +1,6 @@
 const express = require('express');
+app = express()
+app.use(cors())
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const cors = require('cors');
@@ -13,8 +15,6 @@ const {todoRouter} = require("./Routs/todo.routs");
 
 
 
-app = express()
-app.use(cors())
 app.use(express.json());
 app.get("/",(req,res)=>{
     res.send("Welcome")
